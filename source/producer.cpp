@@ -1,5 +1,5 @@
-// Process 1: runs the program, then sends its output to Process 2 through an anonymous pipe.
-// Process 1 never prints the output itself; only errors go to stderr.
+// Producer: runs the program, then sends its output to the consumer through an
+// anonymous pipe. The producer never prints the output itself; only errors go to stderr.
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -10,22 +10,22 @@
 
 namespace {
 
-// process2.exe is expected next to process1.exe, so it is found from any working directory.
-std::wstring receiverPath() {
+// consumer.exe is expected next to producer.exe, so it is found from any working directory.
+std::wstring consumerPath() {
     wchar_t buffer[MAX_PATH];
     const DWORD length = GetModuleFileNameW(nullptr, buffer, MAX_PATH);
     std::wstring path(buffer, length);
     path.erase(path.find_last_of(L"\\/") + 1);
-    return path + L"process2.exe";
+    return path + L"consumer.exe";
 }
 
-struct Receiver {
+struct Consumer {
     UniqueHandle process;
     UniqueHandle pipeWriteEnd;
 };
 
-// Creates the pipe and starts Process 2 with the pipe's read end as its stdin.
-std::optional<Receiver> startReceiver() {
+// Creates the pipe and starts the consumer with the pipe's read end as its stdin.
+std::optional<Consumer> startConsumer() {
     SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
 
     HANDLE readEnd = nullptr;
@@ -45,7 +45,7 @@ std::optional<Receiver> startReceiver() {
     startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 
-    std::wstring path = receiverPath();
+    std::wstring path = consumerPath();
     PROCESS_INFORMATION info{};
     if (!CreateProcessW(path.c_str(), nullptr, nullptr, nullptr, TRUE, 0, nullptr, nullptr,
                         &startup, &info)) {
@@ -54,7 +54,7 @@ std::optional<Receiver> startReceiver() {
     CloseHandle(info.hThread);
 
     // `read` is closed when it goes out of scope; the child keeps its own copy.
-    return Receiver{UniqueHandle(info.hProcess), std::move(write)};
+    return Consumer{UniqueHandle(info.hProcess), std::move(write)};
 }
 
 }  // namespace
@@ -66,20 +66,20 @@ int main() {
     std::ostringstream output;
     runProgram(count, rng, output);
 
-    auto receiver = startReceiver();
-    if (!receiver) {
-        std::cerr << "process1: failed to start process2 (error " << GetLastError() << ")\n";
+    auto consumer = startConsumer();
+    if (!consumer) {
+        std::cerr << "producer: failed to start consumer (error " << GetLastError() << ")\n";
         return 1;
     }
 
-    const bool sent = sendMessage(receiver->pipeWriteEnd.get(), ProcessMessage(output.str()));
-    receiver->pipeWriteEnd.reset();  // signals EOF to Process 2
+    const bool sent = sendMessage(consumer->pipeWriteEnd.get(), ProcessMessage(output.str()));
+    consumer->pipeWriteEnd.reset();  // signals EOF to the consumer
     if (!sent) {
-        std::cerr << "process1: failed to send the message to process2\n";
+        std::cerr << "producer: failed to send the message to the consumer\n";
     }
 
-    WaitForSingleObject(receiver->process.get(), INFINITE);
+    WaitForSingleObject(consumer->process.get(), INFINITE);
     DWORD exitCode = 1;
-    GetExitCodeProcess(receiver->process.get(), &exitCode);
+    GetExitCodeProcess(consumer->process.get(), &exitCode);
     return sent ? static_cast<int>(exitCode) : 1;
 }

@@ -1,5 +1,5 @@
-// injector.exe: starts Process 1 suspended, injects hook.dll so the WriteFile hook
-// is in place before Process 1 runs, then resumes it. process1.exe and hook.dll are
+// injector.exe: starts the producer suspended, injects hook.dll so the WriteFile hook
+// is in place before the producer runs, then resumes it. producer.exe and hook.dll are
 // expected next to injector.exe.
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -51,16 +51,16 @@ bool injectDll(HANDLE process, const std::wstring& dllPath) {
 
 int main() {
     const std::wstring dir = dirOfThisExe();
-    const std::wstring process1 = dir + L"process1.exe";
+    const std::wstring producer = dir + L"producer.exe";
     const std::wstring dll = dir + L"hook.dll";
 
-    std::wstring cmdline = L"\"" + process1 + L"\"";  // CreateProcessW may modify this buffer
+    std::wstring cmdline = L"\"" + producer + L"\"";  // CreateProcessW may modify this buffer
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
     PROCESS_INFORMATION info{};
-    if (!CreateProcessW(process1.c_str(), cmdline.data(), nullptr, nullptr, TRUE, CREATE_SUSPENDED,
+    if (!CreateProcessW(producer.c_str(), cmdline.data(), nullptr, nullptr, TRUE, CREATE_SUSPENDED,
                         nullptr, nullptr, &startup, &info)) {
-        std::cerr << "injector: failed to start process1 (error " << GetLastError() << ")\n";
+        std::cerr << "injector: failed to start producer (error " << GetLastError() << ")\n";
         return 1;
     }
 

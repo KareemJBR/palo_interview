@@ -1,6 +1,6 @@
-// hook.dll: an Import Address Table hook on WriteFile, installed in Process 1 by
+// hook.dll: an Import Address Table hook on WriteFile, installed in the producer by
 // the injector. It reconstructs each ProcessMessage from the bytes written to the
-// pipe, prints it, then calls the real WriteFile so Process 1 -> Process 2 is
+// pipe, prints it, then calls the real WriteFile so producer -> consumer is
 // unaffected. This is the API-interception technique endpoint-security agents use.
 #include "hook.h"
 

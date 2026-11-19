@@ -4,11 +4,11 @@ set -euo pipefail
 
 FLAGS="-std=c++17 -Wall -Wextra -O2 -Iheaders"
 
-echo "Building process1.exe (sender)..."
-g++ $FLAGS source/rules.cpp source/process_message.cpp source/pipe.cpp source/process1.cpp -o process1
+echo "Building producer.exe (generates + sends)..."
+g++ $FLAGS source/rules.cpp source/process_message.cpp source/pipe.cpp source/producer.cpp -o producer
 
-echo "Building process2.exe (receiver)..."
-g++ $FLAGS source/process_message.cpp source/pipe.cpp source/process2.cpp -o process2
+echo "Building consumer.exe (receives + prints)..."
+g++ $FLAGS source/process_message.cpp source/pipe.cpp source/consumer.cpp -o consumer
 
 echo "Building hook.dll (WriteFile IAT hook)..."
 g++ $FLAGS -static -shared source/hook.cpp source/process_message.cpp -o hook.dll
@@ -22,5 +22,5 @@ g++ $FLAGS source/rules.cpp source/process_message.cpp source/test.cpp -o test
 echo
 echo "Done. Try:"
 echo "  ./test        # unit tests"
-echo "  ./process1    # Level 1+2: Process 1 -> pipe -> Process 2 prints"
+echo "  ./producer    # Level 1+2: producer -> pipe -> consumer prints"
 echo "  ./injector    # Level 3: hooked run, see hook.log"

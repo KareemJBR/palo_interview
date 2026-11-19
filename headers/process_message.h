@@ -6,7 +6,7 @@
 #include <string>
 #include <string_view>
 
-// A message sent from Process 1 to Process 2.
+// A message sent from the producer to the consumer.
 // Wire format: 4-byte little-endian payload length, followed by the payload bytes.
 class ProcessMessage {
 public:
