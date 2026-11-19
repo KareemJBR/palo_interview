@@ -8,11 +8,32 @@
 #define NOMINMAX
 #endif
 #include <windows.h>
+#include <tlhelp32.h>
 
 #include <iostream>
 #include <string>
 
 namespace {
+
+// True if a module named `name` is currently mapped in the target process.
+bool moduleLoaded(DWORD pid, const wchar_t* name) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    if (snap == INVALID_HANDLE_VALUE) return false;
+
+    MODULEENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    bool found = false;
+    if (Module32FirstW(snap, &entry)) {
+        do {
+            if (lstrcmpiW(entry.szModule, name) == 0) {
+                found = true;
+                break;
+            }
+        } while (Module32NextW(snap, &entry));
+    }
+    CloseHandle(snap);
+    return found;
+}
 
 std::wstring dirOfThisExe() {
     wchar_t buffer[MAX_PATH];
@@ -35,10 +56,11 @@ bool injectDll(HANDLE process, const std::wstring& dllPath) {
         HANDLE thread = CreateRemoteThread(process, nullptr, 0, loadLibrary, remote, 0, nullptr);
         if (thread) {
             WaitForSingleObject(thread, INFINITE);
-            DWORD loaded = 0;
-            GetExitCodeThread(thread, &loaded);  // 0 on x64 => LoadLibraryW failed
-            ok = loaded != 0;
             CloseHandle(thread);
+            // The remote thread's exit code is LoadLibraryW's HMODULE truncated to 32 bits,
+            // which is unreliable on x64. Confirm the DLL is actually mapped instead. This
+            // also catches the DLL loading but refusing to install (DllMain returns FALSE).
+            ok = moduleLoaded(GetProcessId(process), L"hook.dll");
         } else {
             ok = false;
         }

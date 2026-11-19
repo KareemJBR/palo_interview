@@ -10,6 +10,7 @@ bool writeAll(HANDLE handle, std::string_view data) {
         const auto chunk = static_cast<DWORD>(std::min(data.size(), MAX_CHUNK));
         DWORD written = 0;
         if (!WriteFile(handle, data.data(), chunk, &written, nullptr)) return false;
+        if (written == 0) return false;  // no progress -> avoid spinning forever
         data.remove_prefix(written);
     }
     return true;

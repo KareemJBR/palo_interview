@@ -25,18 +25,27 @@ struct Consumer {
 };
 
 // Creates the pipe and starts the consumer with the pipe's read end as its stdin.
-std::optional<Consumer> startConsumer() {
+// `error` is set to the Win32 error of whichever call failed (captured immediately,
+// before the UniqueHandle destructors run CloseHandle and clobber the thread's last error).
+std::optional<Consumer> startConsumer(DWORD& error) {
+    error = 0;
     SECURITY_ATTRIBUTES inheritable{sizeof(SECURITY_ATTRIBUTES), nullptr, TRUE};
 
     HANDLE readEnd = nullptr;
     HANDLE writeEnd = nullptr;
-    if (!CreatePipe(&readEnd, &writeEnd, &inheritable, 0)) return std::nullopt;
+    if (!CreatePipe(&readEnd, &writeEnd, &inheritable, 0)) {
+        error = GetLastError();
+        return std::nullopt;
+    }
     UniqueHandle read(readEnd);
     UniqueHandle write(writeEnd);
 
     // Only the read end goes to the child. If the child inherited the write end too,
     // it would never see EOF on its stdin.
-    if (!SetHandleInformation(write.get(), HANDLE_FLAG_INHERIT, 0)) return std::nullopt;
+    if (!SetHandleInformation(write.get(), HANDLE_FLAG_INHERIT, 0)) {
+        error = GetLastError();
+        return std::nullopt;
+    }
 
     STARTUPINFOW startup{};
     startup.cb = sizeof(startup);
@@ -49,6 +58,7 @@ std::optional<Consumer> startConsumer() {
     PROCESS_INFORMATION info{};
     if (!CreateProcessW(path.c_str(), nullptr, nullptr, nullptr, TRUE, 0, nullptr, nullptr,
                         &startup, &info)) {
+        error = GetLastError();
         return std::nullopt;
     }
     CloseHandle(info.hThread);
@@ -66,9 +76,10 @@ int main() {
     std::ostringstream output;
     runProgram(count, rng, output);
 
-    auto consumer = startConsumer();
+    DWORD startError = 0;
+    auto consumer = startConsumer(startError);
     if (!consumer) {
-        std::cerr << "producer: failed to start consumer (error " << GetLastError() << ")\n";
+        std::cerr << "producer: failed to start consumer (error " << startError << ")\n";
         return 1;
     }
 

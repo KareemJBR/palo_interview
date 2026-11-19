@@ -17,12 +17,25 @@ WriteFile_t g_realWriteFile = nullptr;
 std::mutex g_mutex;
 std::string g_accum;   // bytes seen on the pipe, awaiting a complete message
 std::ofstream g_log;
+bool g_logOpened = false;
+
+// Opens hook.log on first use. Deliberately NOT called from DllMain: file/stream I/O
+// under the loader lock is unsafe. This runs later, on the producer's own thread,
+// always under g_mutex (see hookedWriteFile).
+std::ofstream& log() {
+    if (!g_logOpened) {
+        g_logOpened = true;
+        g_log.open("hook.log", std::ios::out | std::ios::trunc);
+        if (g_log) g_log << "[hook] installed; WriteFile hooked\n" << std::flush;
+    }
+    return g_log;
+}
 
 void logMessage(const ProcessMessage& message) {
     const std::string banner = "[hook] intercepted ProcessMessage (" +
                                std::to_string(ProcessMessage::HEADER_SIZE + message.payload().size()) +
                                " bytes):\n" + message.payload();
-    if (g_log) g_log << banner << "\n--- end of message ---\n" << std::flush;
+    if (log()) g_log << banner << "\n--- end of message ---\n" << std::flush;
     // Also to stderr so it is visible on the console during a run.
     fprintf(stderr, "%s\n", banner.c_str());
     fflush(stderr);
@@ -71,7 +84,11 @@ bool installHook() {
     if (dir.VirtualAddress == 0) return false;
     auto* desc = reinterpret_cast<IMAGE_IMPORT_DESCRIPTOR*>(base + dir.VirtualAddress);
 
-    // Scan every imported DLL for a function named "WriteFile" and patch its IAT slot.
+    // Scan every imported DLL for a function named "WriteFile" and patch each IAT slot.
+    // Scope: only this (the main) module's import table is patched, which is enough here
+    // because the producer calls WriteFile directly from its own code. A general-purpose
+    // agent would also walk every other loaded module's IAT; that is out of scope.
+    bool hooked = false;
     for (; desc->Name != 0; ++desc) {
         if (desc->OriginalFirstThunk == 0) continue;
         auto* names = reinterpret_cast<IMAGE_THUNK_DATA*>(base + desc->OriginalFirstThunk);
@@ -84,26 +101,22 @@ bool installHook() {
 
             void** slot = reinterpret_cast<void**>(&iat->u1.Function);
             DWORD oldProtect = 0;
-            if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect)) return false;
+            if (!VirtualProtect(slot, sizeof(void*), PAGE_READWRITE, &oldProtect)) continue;
             g_realWriteFile = reinterpret_cast<WriteFile_t>(*slot);
             *slot = reinterpret_cast<void*>(&hookedWriteFile);
             VirtualProtect(slot, sizeof(void*), oldProtect, &oldProtect);
-            return true;
+            hooked = true;  // keep going: patch every WriteFile slot, don't stop at the first
         }
     }
-    return false;
+    return hooked;
 }
 
 extern "C" BOOL WINAPI DllMain(HINSTANCE, DWORD reason, LPVOID) {
     if (reason == DLL_PROCESS_ATTACH) {
-        g_log.open("hook.log", std::ios::out | std::ios::trunc);
-        const bool ok = installHook();
-        if (g_log) g_log << (ok ? "[hook] installed; WriteFile hooked\n"
-                                : "[hook] FAILED to find WriteFile in the import table\n")
-                         << std::flush;
-        fprintf(stderr, ok ? "[hook] installed; WriteFile hooked\n"
-                           : "[hook] FAILED to find WriteFile in the import table\n");
-        fflush(stderr);
+        // Only the IAT patch runs here: it is fast and loader-lock-safe (no LoadLibrary,
+        // no CRT/file I/O). Returning FALSE when it fails makes LoadLibraryW in the target
+        // fail too, so the injector detects a hook that did not install.
+        return installHook() ? TRUE : FALSE;
     }
     return TRUE;
 }
