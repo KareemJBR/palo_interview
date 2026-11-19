@@ -17,7 +17,7 @@ echo "Building injector.exe..."
 g++ $FLAGS -static source/injector.cpp -o injector
 
 echo "Building test.exe (unit tests)..."
-g++ $FLAGS source/rules.cpp source/process_message.cpp source/test.cpp -o test
+g++ $FLAGS source/rules.cpp source/process_message.cpp source/pipe.cpp source/test.cpp -o test
 
 echo
 echo "Done. Try:"

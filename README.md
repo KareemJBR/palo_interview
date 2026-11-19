@@ -79,7 +79,7 @@ g++ $FLAGS source/rules.cpp source/process_message.cpp source/pipe.cpp source/pr
 g++ $FLAGS source/process_message.cpp source/pipe.cpp source/consumer.cpp -o consumer
 g++ $FLAGS -static -shared source/hook.cpp source/process_message.cpp -o hook.dll
 g++ $FLAGS -static source/injector.cpp -o injector
-g++ $FLAGS source/rules.cpp source/process_message.cpp source/test.cpp -o test
+g++ $FLAGS source/rules.cpp source/process_message.cpp source/pipe.cpp source/test.cpp -o test
 ```
 
 ---
@@ -97,6 +97,9 @@ All five files must be in the **same folder** (the build puts them there).
 `producer` builds the output and sends it over a pipe to `consumer`, which prints
 it. `producer` itself prints nothing except errors. You will see one header line
 followed by one line per number.
+
+> `consumer` is launched by `producer`; you do not run it yourself. Started
+> directly it has no producer to read from, so it just reports that and exits.
 
 ### Level 3 — the hooked run
 
@@ -120,9 +123,14 @@ printed, which is the proof that the hook saw the data in transit.
 ./test
 ```
 
-Runs two automated checks and prints `PASS` for each:
-- the program with X fixed to 5 produces correctly categorized output, and
-- a message survives being packaged and unpackaged (the pipe format).
+Runs the unit tests and prints `PASS` for each group:
+- **rules** – a fixed X=5 run, the documented category mapping (12→2, 311→1,
+  222→3, 32→4), the rule-order overlaps (e.g. an odd number starting with 1 is
+  rule 1, not rule 2), and range boundaries;
+- **ProcessMessage** – a message survives being packaged and unpackaged, including
+  empty and binary (null-byte) payloads;
+- **pipe** – a message sent and received over a real pipe, plus a clean failure on
+  end-of-input and on a header claiming an absurd payload size.
 
 ---
 
@@ -156,3 +164,7 @@ build.sh   # builds everything
   `bash build.sh` to rebuild them together.
 - **`producer: failed to start consumer`** – `consumer.exe` is missing from the
   folder; rebuild with `bash build.sh`.
+- **`cannot open output file ...: Permission denied`** (during a build) – one of
+  the programs is still running and Windows has locked its `.exe`/`.dll`. Let it
+  finish (they all exit on their own), then rebuild. A normal rebuild otherwise
+  just overwrites the existing files in place.
