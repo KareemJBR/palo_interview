@@ -42,6 +42,7 @@ std::optional<ProcessMessage> receiveMessage(HANDLE handle) {
 
     const auto length = ProcessMessage::parseHeader(*header);
     if (!length) return std::nullopt;
+    if (*length > ProcessMessage::MAX_PAYLOAD) return std::nullopt;  // reject an absurd length
 
     auto payload = readExact(handle, *length);
     if (!payload) return std::nullopt;

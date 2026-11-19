@@ -12,6 +12,11 @@ class ProcessMessage {
 public:
     static constexpr std::size_t HEADER_SIZE = sizeof(std::uint32_t);
 
+    // A receiver rejects any header claiming a payload larger than this. The real
+    // output is a few MB at most; this only guards against a garbage/hostile header
+    // (e.g. run by hand with junk on stdin) triggering a huge allocation.
+    static constexpr std::uint32_t MAX_PAYLOAD = 64u * 1024u * 1024u;  // 64 MiB
+
     explicit ProcessMessage(std::string payload) : payload_(std::move(payload)) {}
 
     const std::string& payload() const { return payload_; }
