@@ -1,0 +1,9 @@
+# Build artifacts
+*.exe
+*.dll
+*.o
+*.obj
+
+# Runtime output
+hook.log
+out.txt
